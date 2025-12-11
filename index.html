@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8" />
+  <title>Vereniging Matcher</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="styles.css" />
+  <!-- SheetJS voor Excel inlezen en wegschrijven -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.19.3/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+  <main class="page">
+    <header class="header">
+      <h1>Vereniging Matcher</h1>
+      <p>
+        Upload hieronder je twee Excel-bestanden:
+      </p>
+      <ul>
+        <li><strong>Aanbieders / KVK-export</strong> (met o.a. kolommen <code>DOSSIERNR</code>, <code>FANAAM</code>, <code>VENNAAM</code>, <code>GEMEENTE</code>, <code>EMAIL</code>).</li>
+        <li><strong>CO non-profit</strong> (met o.a. kolommen <code>Nr.</code>, <code>KvK-nummer</code>, <code>Naam</code>, <code>Vestigingsgemeente</code>, <code>E-mail</code>).</li>
+      </ul>
+      <p>
+        De tool maakt vervolgens een vergelijking en genereert één Excel-bestand met:
+      </p>
+      <ol>
+        <li><strong>Tabblad 1</strong> – KVK-match (gegevens naast elkaar)</li>
+        <li><strong>Tabblad 2</strong> – Geen KVK in CO</li>
+        <li><strong>Tabblad 3</strong> – Wel KVK in CO, geen match in Aanbieders</li>
+        <li><strong>Tabblad 4</strong> – Naam-match (kandidaten obv naam + gemeente)</li>
+      </ol>
+    </header>
+
+    <section class="card">
+      <div class="field">
+        <label for="file-aanbieders">Aanbieders / KVK-export (.xlsx)</label>
+        <input type="file" id="file-aanbieders" accept=".xlsx,.xls" />
+      </div>
+      <div class="field">
+        <label for="file-co">CO non-profit (.xlsx)</label>
+        <input type="file" id="file-co" accept=".xlsx,.xls" />
+      </div>
+
+      <button id="btn-run" class="btn-primary">Vergelijk bestanden</button>
+    </section>
+
+    <section id="status" class="card status-card">
+      <h2>Status</h2>
+      <pre id="log"></pre>
+    </section>
+
+    <section id="download-section" class="card hidden">
+      <h2>Resultaat</h2>
+      <p>Klik hieronder om het Excel-resultaat te downloaden.</p>
+      <button id="btn-download" class="btn-secondary">Download resultaat.xlsx</button>
+    </section>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>
