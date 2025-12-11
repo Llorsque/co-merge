@@ -1,7 +1,6 @@
-// Vereniging Matcher
-// Frontend-only tool: leest twee Excel-bestanden in, vergelijkt, en maakt een nieuw Excel-bestand.
+// Vereniging Matcher v2
+// Let op: vereist internettoegang om de XLSX-bibliotheek vanaf cdnjs te laden.
 
-// ====== Helper logging ======
 const logEl = document.getElementById("log");
 function log(msg) {
   if (!logEl) return;
@@ -10,24 +9,39 @@ function log(msg) {
   logEl.scrollTop = logEl.scrollHeight;
 }
 
+// Runtime check: bestaat XLSX?
+if (typeof XLSX === "undefined") {
+  if (logEl) {
+    logEl.textContent = "";
+    log("❌ De Excel-bibliotheek (XLSX) is niet geladen.");
+    log("   Mogelijke oorzaken:");
+    log("   - Geen internetverbinding of CDN geblokkeerd");
+    log("   - Script-tag naar xlsx.full.min.js ontbreekt of is aangepast");
+    log("   Oplossing:");
+    log("   - Zorg dat je internet hebt en vernieuw de pagina");
+    log("   - Of host de tool op GitHub Pages zodat de CDN goed laad.");
+  } else {
+    alert("De Excel-bibliotheek (XLSX) is niet geladen. Controleer je internetverbinding of de script-tag in index.html.");
+  }
+}
+
+// ====== Alleen verder gaan als XLSX bestaat ======
+if (typeof XLSX !== "undefined") {
+
 // ====== Normalisatie helpers ======
 function normalizeKvk(value) {
   if (value === undefined || value === null) return "";
   let s = String(value).trim();
   if (!s) return "";
-  // haal alles weg behalve cijfers
   s = s.replace(/\D+/g, "");
   if (!s) return "";
-  // pad naar 8 cijfers
   return s.padStart(8, "0");
 }
 
 function normalizeName(value) {
   if (value === undefined || value === null) return "";
   let s = String(value).toLowerCase().trim();
-  // quotes weg
   s = s.replace(/["“”„'’`]/g, "");
-  // meerdere spaties naar één
   s = s.replace(/\s+/g, " ");
   return s;
 }
@@ -35,14 +49,11 @@ function normalizeName(value) {
 function normalizeGemeente(value) {
   if (value === undefined || value === null) return "";
   let s = String(value).toLowerCase().trim();
-  // verwijder diacritics
   s = s.normalize("NFD").replace(/\p{Diacritic}/gu, "");
-  // alleen letters
   s = s.replace(/[^a-z]/g, "");
   return s;
 }
 
-// Bigrams voor similarity
 function bigrams(str) {
   const s = str;
   const res = [];
@@ -52,27 +63,21 @@ function bigrams(str) {
   return res;
 }
 
-// Dice coefficient op bigrams → 0..100
 function bigramSimilarity(a, b) {
   a = a || "";
   b = b || "";
   if (!a && !b) return 100;
   if (!a || !b) return 0;
-
   const aGrams = bigrams(a);
   const bGrams = bigrams(b);
   if (!aGrams.length || !bGrams.length) {
     return a === b ? 100 : 0;
   }
   const aMap = new Map();
-  for (const g of aGrams) {
-    aMap.set(g, (aMap.get(g) || 0) + 1);
-  }
+  for (const g of aGrams) aMap.set(g, (aMap.get(g) || 0) + 1);
   let inter = 0;
   const bMap = new Map();
-  for (const g of bGrams) {
-    bMap.set(g, (bMap.get(g) || 0) + 1);
-  }
+  for (const g of bGrams) bMap.set(g, (bMap.get(g) || 0) + 1);
   for (const [g, aCount] of aMap.entries()) {
     const bCount = bMap.get(g) || 0;
     inter += Math.min(aCount, bCount);
@@ -81,12 +86,10 @@ function bigramSimilarity(a, b) {
   return Math.round(score * 100);
 }
 
-// Naamstatus: Exact / Bijna / Anders
 function naamStatus(naamCO, naamAan) {
   const e1 = naamCO == null ? "" : String(naamCO);
   const e2 = naamAan == null ? "" : String(naamAan);
   if (e1 && e1 === e2) return "Exact";
-
   const clean = (s) => {
     if (s == null) return "";
     let t = String(s).toLowerCase().trim();
@@ -100,23 +103,19 @@ function naamStatus(naamCO, naamAan) {
   return "Anders";
 }
 
-// ====== XLSX helpers ======
 function sheetToJson(workbook, sheetName) {
   const ws = workbook.Sheets[sheetName];
   if (!ws) throw new Error(`Kon werkblad '${sheetName}' niet vinden.`);
   return XLSX.utils.sheet_to_json(ws, { defval: "" });
 }
 
-// Detecteer eerste sheetnaam
 function firstSheetName(workbook) {
   return workbook.SheetNames[0];
 }
 
-// ====== Matchinglogica ======
 function buildResult(aanRows, coRows) {
   log("Start met normaliseren van KVK-nummers...");
 
-  // Normaliseer KVK in beide
   const aan = aanRows.map((r) => ({
     ...r,
     KVK8: normalizeKvk(r.DOSSIERNR ?? r["DOSSIERNR"]),
@@ -149,7 +148,6 @@ function buildResult(aanRows, coRows) {
     ),
   }));
 
-  // Map Aanbieders op KVK8 (eerste record wint)
   const aanByKvk = {};
   for (const row of aan) {
     if (row.KVK8 && !aanByKvk[row.KVK8]) {
@@ -157,10 +155,9 @@ function buildResult(aanRows, coRows) {
     }
   }
 
-  // Tabblad 1: KVK-match
   const tab1 = [];
-  const tab2 = []; // Geen KVK in CO
-  const tab3 = []; // Wel KVK in CO, geen match
+  const tab2 = [];
+  const tab3 = [];
 
   for (const r of co) {
     if (!r.KVK8) {
@@ -198,10 +195,8 @@ function buildResult(aanRows, coRows) {
   log(`Geen KVK in CO (Tabblad 2): ${tab2.length} rijen`);
   log(`Wel KVK, geen match in Aanbieders (Tabblad 3): ${tab3.length} rijen`);
 
-  // Tabblad 4: Naam-match voor tab3
   log("Start met zoeken naar naamsuggesties voor Tabblad 3...");
 
-  // Kandidatenlijst namen Aanbieders (norm)
   const aanCandidates = [];
   for (const a of aan) {
     const n1 = normalizeName(a.FANAAM);
@@ -262,7 +257,6 @@ function buildResult(aanRows, coRows) {
 
   log(`Naam-suggesties (Tabblad 4): ${tab4.length} rijen`);
 
-  // Samenvatting
   const summary = [
     { Categorie: "Totaal records CO", Aantal: co.length },
     { Categorie: "Tabblad 1 - KVK match", Aantal: tab1.length },
@@ -280,7 +274,6 @@ function buildResult(aanRows, coRows) {
   return { summary, tab1, tab2, tab3, tab4 };
 }
 
-// ====== Main flow ======
 let latestWorkbookBlob = null;
 
 async function handleRun() {
@@ -288,7 +281,7 @@ async function handleRun() {
   const fileCo = document.getElementById("file-co").files[0];
   latestWorkbookBlob = null;
   document.getElementById("download-section").classList.add("hidden");
-  logEl.textContent = "";
+  if (logEl) logEl.textContent = "";
 
   if (!fileAan || !fileCo) {
     log("⚠️ Kies zowel een Aanbieders-bestand als een CO non-profit-bestand.");
@@ -317,7 +310,6 @@ async function handleRun() {
 
     const { summary, tab1, tab2, tab3, tab4 } = buildResult(aanRows, coRows);
 
-    // Bouw output workbook
     const outWb = XLSX.utils.book_new();
     const wsSummary = XLSX.utils.json_to_sheet(summary);
     const ws1 = XLSX.utils.json_to_sheet(tab1);
@@ -331,13 +323,9 @@ async function handleRun() {
     XLSX.utils.book_append_sheet(outWb, ws3, "Tabblad3_Wel_KVK_geen_match");
     XLSX.utils.book_append_sheet(outWb, ws4, "Tabblad4_Naam_match");
 
-    const wbout = XLSX.write(outWb, {
-      bookType: "xlsx",
-      type: "array",
-    });
+    const wbout = XLSX.write(outWb, { bookType: "xlsx", type: "array" });
     latestWorkbookBlob = new Blob([wbout], {
-      type:
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     });
 
     document.getElementById("download-section").classList.remove("hidden");
@@ -380,3 +368,5 @@ function handleDownload() {
 
 document.getElementById("btn-run").addEventListener("click", handleRun);
 document.getElementById("btn-download").addEventListener("click", handleDownload);
+
+} // einde if XLSX bestaat
